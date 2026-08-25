@@ -7,6 +7,14 @@
   "main": "./index.js",
   "module": "./dist/index.mjs",
   "types": "./types/index.d.ts",
+  "files": [
+    "dist",
+    "index.js",
+    "lib",
+    "types",
+    "LICENSE.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "node ./scripts/build.js",
     "test": "mocha --exit \"./test/**/*.test.js\"",
