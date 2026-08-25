@@ -1,8 +1,8 @@
-# mongoose-lite
+# mongoose-mini
 
 > A lightweight, high-performance, and minimalized Mongoose MongoDB ODM for Node.js. Pre-bundled into single-file CommonJS and ESM modules for zero bloat, fast startup times, and seamless tree-shaking support.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/mongoose/mongoose-lite)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/thesixers/mongoose-mini)
 [![Node Target](https://img.shields.io/badge/node-%3E%3D20.19.0-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![Modules](https://img.shields.io/badge/modules-CJS%20%7C%20ESM-orange.svg)](#importing)
@@ -11,7 +11,7 @@
 
 ## Overview
 
-**`mongoose-lite`** provides the full object modeling experience of Mongoose with a minimal runtime footprint. Engineered for modern Node.js environments, `mongoose-lite` comes pre-compiled into optimized CommonJS (`dist/index.js`) and ES Module (`dist/index.mjs`) bundles via `esbuild`, stripping out unnecessary dependencies while retaining maximum performance and developer ergonomics.
+**`mongoose-mini`** provides the full object modeling experience of Mongoose with a minimal runtime footprint. Engineered for modern Node.js environments, `mongoose-mini` comes pre-compiled into optimized CommonJS (`dist/index.js`) and ES Module (`dist/index.mjs`) bundles via `esbuild`, stripping out unnecessary dependencies while retaining maximum performance and developer ergonomics.
 
 ### Key Features
 
@@ -26,57 +26,57 @@
 
 ## Installation
 
-Install `mongoose-lite` using your preferred package manager:
+Install `mongoose-mini` using your preferred package manager:
 
 ### Using npm
 
 ```bash
-npm install mongoose-lite
+npm install mongoose-mini
 ```
 
 ### Using pnpm
 
 ```bash
-pnpm add mongoose-lite
+pnpm add mongoose-mini
 ```
 
 ### Using Yarn
 
 ```bash
-yarn add mongoose-lite
+yarn add mongoose-mini
 ```
 
 ### Using Bun
 
 ```bash
-bun add mongoose-lite
+bun add mongoose-mini
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Import `mongoose-lite`
+### 1. Import `mongoose-mini`
 
 **ES Modules (ESM):**
 ```javascript
-import mongooseLite, { Schema } from 'mongoose-lite';
+import mongooseMini, { Schema } from 'mongoose-mini';
 ```
 
 **CommonJS (CJS):**
 ```javascript
-const mongooseLite = require('mongoose-lite');
-const { Schema } = mongooseLite;
+const mongooseMini = require('mongoose-mini');
+const { Schema } = mongooseMini;
 ```
 
 ### 2. Connect & Define Models
 
 ```javascript
-import mongooseLite, { Schema } from 'mongoose-lite';
+import mongooseMini, { Schema } from 'mongoose-mini';
 
 async function run() {
   // Connect to MongoDB
-  await mongooseLite.connect('mongodb://127.0.0.1:27017/my_database');
+  await mongooseMini.connect('mongodb://127.0.0.1:27017/my_database');
   console.log('Connected to MongoDB!');
 
   // Define Schema
@@ -88,7 +88,7 @@ async function run() {
   });
 
   // Create Model
-  const User = mongooseLite.model('User', userSchema);
+  const User = mongooseMini.model('User', userSchema);
 
   // Create & Save Document
   const newUser = new User({
@@ -105,7 +105,7 @@ async function run() {
 
   // Clean Up & Disconnect
   await User.deleteOne({ _id: newUser._id });
-  await mongooseLite.disconnect();
+  await mongooseMini.disconnect();
 }
 
 run().catch(console.error);
@@ -119,21 +119,21 @@ run().catch(console.error);
 
 #### Default Connection
 
-For applications using a single database, use `mongooseLite.connect`:
+For applications using a single database, use `mongooseMini.connect`:
 
 ```javascript
-await mongooseLite.connect('mongodb://127.0.0.1:27017/myapp', {
+await mongooseMini.connect('mongodb://127.0.0.1:27017/myapp', {
   maxPoolSize: 10
 });
 ```
 
 #### Multiple Connections
 
-For applications requiring multiple database connections, use `mongooseLite.createConnection`:
+For applications requiring multiple database connections, use `mongooseMini.createConnection`:
 
 ```javascript
-const userDb = mongooseLite.createConnection('mongodb://127.0.0.1:27017/users');
-const analyticsDb = mongooseLite.createConnection('mongodb://127.0.0.1:27017/analytics');
+const userDb = mongooseMini.createConnection('mongodb://127.0.0.1:27017/users');
+const analyticsDb = mongooseMini.createConnection('mongodb://127.0.0.1:27017/analytics');
 
 const User = userDb.model('User', userSchema);
 const Event = analyticsDb.model('Event', eventSchema);
@@ -143,10 +143,10 @@ const Event = analyticsDb.model('Event', eventSchema);
 
 ### Schemas & Validation
 
-`mongoose-lite` supports rich schema definition with built-in and custom validators:
+`mongoose-mini` supports rich schema definition with built-in and custom validators:
 
 ```javascript
-import { Schema } from 'mongoose-lite';
+import { Schema } from 'mongoose-mini';
 
 const productSchema = new Schema({
   title: {
@@ -173,7 +173,7 @@ const productSchema = new Schema({
 
 #### Standard Schema Support
 
-`mongoose-lite` integrates with the `@standard-schema/spec` standard for validation interoperability with libraries like Zod, Valibot, or ArkType.
+`mongoose-mini` integrates with the `@standard-schema/spec` standard for validation interoperability with libraries like Zod, Valibot, or ArkType.
 
 ---
 
@@ -215,8 +215,8 @@ const postSchema = new Schema({
   author: { type: Schema.Types.ObjectId, ref: 'Author' }
 });
 
-const Author = mongooseLite.model('Author', authorSchema);
-const Post = mongooseLite.model('Post', postSchema);
+const Author = mongooseMini.model('Author', authorSchema);
+const Post = mongooseMini.model('Post', postSchema);
 
 // Query with population
 const post = await Post.findOne({ title: 'Hello World' }).populate('author');
@@ -241,10 +241,10 @@ const salesSummary = await Order.aggregate([
 
 ### TypeScript Usage
 
-`mongoose-lite` comes with complete type definitions out of the box.
+`mongoose-mini` comes with complete type definitions out of the box.
 
 ```typescript
-import mongooseLite, { Schema, Document, Model } from 'mongoose-lite';
+import mongooseMini, { Schema, Document, Model } from 'mongoose-mini';
 
 interface IUser extends Document {
   name: string;
@@ -258,7 +258,7 @@ const userSchema = new Schema<IUser>({
   age: Number
 });
 
-const User: Model<IUser> = mongooseLite.model<IUser>('User', userSchema);
+const User: Model<IUser> = mongooseMini.model<IUser>('User', userSchema);
 ```
 
 ---
@@ -290,9 +290,9 @@ The build output details will be displayed:
 
 ## API Summary Exports
 
-`mongoose-lite` exports all standard Mongoose utilities and constructors:
+`mongoose-mini` exports all standard Mongoose utilities and constructors:
 
-- **Core**: `mongoose` (or `mongooseLite`), `connect`, `disconnect`, `createConnection`, `model`, `deleteModel`
+- **Core**: `mongoose` (or `mongooseMini`), `connect`, `disconnect`, `createConnection`, `model`, `deleteModel`
 - **Classes**: `Schema`, `Model`, `Document`, `Query`, `Aggregate`, `SchemaType`
 - **Types**: `Types`, `ObjectId`, `Decimal128`, `Mixed`
 - **Helpers**: `isValidObjectId`, `isObjectIdOrHexString`, `sanitizeFilter`, `trusted`
@@ -301,4 +301,4 @@ The build output details will be displayed:
 
 ## License
 
-[MIT License](LICENSE.md) - Copyright (c) 2026 Mongoose-Lite Contributors, Automattic & LearnBoost.
+[MIT License](LICENSE.md) - Copyright (c) 2026 Mongoose-Mini Contributors, Automattic & LearnBoost.

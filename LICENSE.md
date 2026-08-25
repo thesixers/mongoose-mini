@@ -1,6 +1,6 @@
 # MIT License
 
-Copyright (c) 2026 Mongoose-Lite Contributors
+Copyright (c) 2026 Mongoose-Mini Contributors
 Copyright (c) 2013-2026 Automattic
 Copyright (c) 2010-2013 LearnBoost <dev@learnboost.com>
 
