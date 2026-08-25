@@ -1,0 +1,132 @@
+import mongoose, { Document, Model, Schema, model, InferSchemaType, ObtainSchemaGeneric, Types } from 'mongoose';
+import { expect } from 'tstyche';
+
+interface IPerson {
+  _id: number;
+  firstName: string;
+  lastName: string;
+
+  fullName: string;
+}
+
+interface IPet {
+  name: string;
+  isDeleted: boolean;
+  ownerId: number;
+
+  owner: IPerson;
+}
+
+interface PetVirtuals {
+  owner: IPerson;
+}
+
+const personSchema = new Schema<IPerson & Document, Model<IPerson & Document>, IPerson>({
+  _id: { type: Number, required: true },
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true }
+});
+
+const petSchema = new Schema<IPet & Document, Model<IPet & Document>, IPet>({
+  name: { type: String, required: true },
+  ownerId: { type: Number, required: true },
+  isDeleted: { type: Boolean, default: false }
+});
+
+// Virtual getters and setters
+personSchema.virtual('fullName')
+  .get(function(this: IPerson, value, virtual, doc) {
+    return `${this.firstName} ${this.lastName}`;
+  })
+  .set(function(this: IPerson, value, virtual, doc) {
+    const splittedName = value.split(' ');
+    this.firstName = splittedName[0];
+    this.lastName = splittedName[1];
+  });
+
+personSchema.virtual('fullNameAlt')
+  .get(function() {
+    return `${this.firstName} ${this.lastName}`;
+  })
+  .set(function(value) {
+    const splittedName = value.split(' ');
+    this.firstName = splittedName[0];
+    this.lastName = splittedName[1];
+  });
+
+// Populated virtuals
+petSchema.virtual('owner', {
+  ref: 'Person',
+  localField: 'ownerId',
+  foreignField: '_id',
+  justOne: true,
+  autopopulate: true,
+  options: {
+    match: { isDeleted: false }
+  }
+});
+
+const Person = model<IPerson>('Person', personSchema);
+const Pet = model<IPet>('Pet', petSchema);
+
+(async() => {
+  const person = await Person.create({ _id: 1, firstName: 'John', lastName: 'Wick' });
+  await Pet.create({ name: 'Andy', ownerId: person._id });
+
+  const pet = await Pet.findOne().orFail().populate('owner');
+  console.log(pet.owner.fullName); // John Wick
+})();
+
+function gh11543() {
+  const personSchema = new Schema<IPerson, Model<IPerson, {}, {}, PetVirtuals>, {}, {}, PetVirtuals>({
+    _id: { type: Number, required: true },
+    firstName: { type: String, required: true },
+    lastName: { type: String, required: true }
+  });
+
+  expect(personSchema.virtuals).type.toBe<PetVirtuals>();
+}
+
+async function autoTypedVirtuals() {
+  type AutoTypedSchemaType = InferSchemaType<typeof testSchema>;
+  type VirtualsType = { domain: string } & { id: string };
+  type InferredDocType = AutoTypedSchemaType & ObtainSchemaGeneric<typeof testSchema, 'TVirtuals'>;
+  // Domain is unknown because of circular dep: this is the type of virtuals in the domain getter and setter
+  type ThisVirtualsType = { domain: unknown } & { id: string };
+  type HydratedDocType = mongoose.HydratedDocument<
+    AutoTypedSchemaType,
+    ThisVirtualsType,
+    {},
+    ThisVirtualsType
+  >;
+
+  const testSchema = new Schema({
+    email: {
+      type: String,
+      required: [true, 'email is required']
+    }
+  }, {
+    virtuals: {
+      domain: {
+        get() {
+          expect(this).type.toBe<HydratedDocType>();
+          return this.email.slice(this.email.indexOf('@') + 1);
+        },
+        set() {
+          expect(this).type.toBe<HydratedDocType>();
+        },
+        options: {}
+      }
+    }
+  });
+
+  const TestModel = model('AutoTypedVirtuals', testSchema);
+
+  const doc = new TestModel();
+  expect(doc.domain).type.toBe<string>();
+
+  expect<InferredDocType>().type.toBe<AutoTypedSchemaType & VirtualsType>();
+
+  const doc2 = await TestModel.findOne().orFail();
+  expect(doc2.domain).type.toBe<string>();
+}

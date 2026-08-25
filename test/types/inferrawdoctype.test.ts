@@ -1,0 +1,500 @@
+import mongoose, { InferRawDocType, InferRawDocTypeFromSchema, ObtainSchemaGeneric, ResolveSchemaOptions, type InferRawDocTypeWithout_id, type ResolveTimestamps, type Schema, type Types, FlattenMaps } from 'mongoose';
+import { expect } from 'tstyche';
+
+function inferPojoType() {
+  const schemaDefinition = {
+    email: {
+      type: String,
+      trim: true,
+      required: true,
+      unique: true,
+      lowercase: true
+    },
+    password: {
+      type: String,
+      required: true
+    },
+    dateOfBirth: {
+      type: Date,
+      required: true
+    }
+  };
+
+  expect<InferRawDocTypeWithout_id<typeof schemaDefinition>>().type.toBe<{
+    email: string,
+    password: string,
+    dateOfBirth: Date
+  }>();
+}
+
+function gh14839() {
+  const schemaDefinition = {
+    email: {
+      type: String,
+      trim: true,
+      required: true,
+      unique: true,
+      lowercase: true
+    },
+    password: {
+      type: String,
+      required: true
+    },
+    dateOfBirth: {
+      type: Date,
+      required: true
+    }
+  };
+
+  expect<InferRawDocType<typeof schemaDefinition>>().type.toBe<{
+    email: string,
+    password: string,
+    dateOfBirth: Date,
+    _id: Types.ObjectId }>();
+}
+
+function optionality() {
+  const schemaDefinition = {
+    name: {
+      type: String,
+      required: true
+    },
+    dateOfBirth: {
+      type: Number
+    }
+  };
+
+  expect<InferRawDocType<typeof schemaDefinition>>().type.toBe<{
+    name: string;
+    dateOfBirth?: number | null,
+    _id: Types.ObjectId
+  }>();
+}
+
+type SchemaOptionsWithTimestamps<t> = {
+  typeKey: 'type';
+  id: true;
+  _id: true;
+  timestamps: t;
+  versionKey: '__v';
+};
+
+function Timestamps() {
+  const schemaDefinition = {
+    name: {
+      type: String,
+      required: true
+    },
+    dateOfBirth: {
+      type: Number
+    }
+  };
+
+  expect<InferRawDocType<typeof schemaDefinition, SchemaOptionsWithTimestamps<true>>>().type.toBe<{
+    name: string;
+    dateOfBirth?: number | null;
+    createdAt: NativeDate; updatedAt: NativeDate;
+    _id: Types.ObjectId }
+  >();
+
+  type Resolved = ResolveTimestamps<
+    { foo: true },
+    {
+      timestamps: {
+        createdAt: 'bar';
+      };
+    }
+  >;
+
+  expect<Resolved>().type.toBe<{ foo: true; bar: NativeDate }>();
+}
+
+function DefinitionTypes() {
+  type Actual = InferRawDocType<{
+    lowercaseString: 'string';
+    uppercaseString: 'String';
+    stringConstructor: typeof String;
+    schemaConstructor: typeof Schema.Types.String;
+    stringInstance: String;
+    schemaInstance: Schema.Types.String;
+  }>;
+
+  expect<Actual>().type.toBe<{
+    lowercaseString?: string | null;
+    uppercaseString?: string | null;
+    stringConstructor?: string | null;
+    schemaConstructor?: string | null;
+    stringInstance?: string | null;
+    schemaInstance?: string | null;
+    _id: Types.ObjectId
+  }>();
+}
+
+function MoreDefinitionTypes() {
+  type Actual = InferRawDocType<{
+    // ensure string literals are not inferred as string
+    numberString: 'number';
+    // ensure a schema constructor with methods is not assignable to an empty one
+    objectIdConstructor: typeof Schema.Types.ObjectId;
+    // ensure a schema instance with methods is not assignable to an empty one
+    objectIdInstance: Schema.Types.ObjectId;
+  }>;
+
+  expect<Actual>().type.toBe<{
+    numberString?: number | null;
+    // these should not fallback to Boolean, which has no methods
+    objectIdConstructor?: Types.ObjectId | null;
+    objectIdInstance?: Types.ObjectId | null;
+    _id: Types.ObjectId
+  }>();
+}
+
+function HandlesAny() {
+  expect<InferRawDocType<any>>().type.toBe<{ [x: PropertyKey]: any; _id: unknown }>();
+  expect<InferRawDocType<Record<string, any>>>().type.toBe<{ [x: string]: any; _id: unknown }>();
+}
+
+function gh15699() {
+  const schema = { unTypedArray: [] } as const;
+
+  expect<InferRawDocType<typeof schema>['unTypedArray']>().type.toBe<any[] | null | undefined>();
+}
+
+function gh13772RawType() {
+  const childSchema = new mongoose.Schema({ name: String });
+
+  const parentSchemaDef = {
+    children: [childSchema],
+    child: childSchema
+  };
+
+  expect<InferRawDocType<typeof parentSchemaDef>>().type.toBe<{
+    children:(FlattenMaps<{ name?: string | null }> & { _id: Types.ObjectId })[];
+    child?: (FlattenMaps<{ name?: string | null }> & { _id: Types.ObjectId }) | null;
+    _id: Types.ObjectId }>();
+}
+
+function gh13772WithIdFalse() {
+  const childSchema = new mongoose.Schema({ name: String }, { _id: false });
+
+  const parentSchemaDef = {
+    children: [childSchema],
+    child: childSchema
+  };
+
+  expect<InferRawDocType<typeof parentSchemaDef>>().type.toBe<{
+    children: FlattenMaps<{ name?: string | null }>[];
+    child?: FlattenMaps<{ name?: string | null }> | null;
+    _id: Types.ObjectId }>();
+}
+
+function gh13772WithSchemaCreate() {
+  const childSchema = mongoose.Schema.create({ name: String });
+
+  const parentSchemaDef = {
+    children: [childSchema],
+    child: childSchema
+  };
+
+  expect<InferRawDocType<typeof parentSchemaDef>>().type.toBe<{
+    children:({ name?: string | null; _id: Types.ObjectId })[];
+    child?: ({ name?: string | null; _id: Types.ObjectId }) | null;
+    _id: Types.ObjectId }>();
+}
+
+function gh13772WithSchemaCreateIdFalse() {
+  const childSchema = mongoose.Schema.create({ name: String }, { _id: false });
+
+  const parentSchemaDef = {
+    children: [childSchema],
+    child: childSchema
+  };
+
+  // Schema.create with _id: false - child subdocs should not have _id
+  expect<InferRawDocType<typeof parentSchemaDef>>().type.toBe<{
+    children: { name?: string | null }[];
+    child?: { name?: string | null } | null;
+    _id: Types.ObjectId }>();
+}
+
+function gh13772WithExplicitDocType() {
+  type ChildDocType = { name?: string | null };
+  const childSchema = new mongoose.Schema<ChildDocType>({ name: String });
+
+  const parentSchemaDef = {
+    children: [childSchema],
+    child: childSchema
+  };
+
+  // Explicit DocType is used directly as RawDocType
+  expect<InferRawDocType<typeof parentSchemaDef>>().type.toBe<{
+    children: ChildDocType[];
+    child?: ChildDocType | null;
+    _id: Types.ObjectId }>();
+}
+
+function gh13772WithExplicitDocTypeIdFalse() {
+  type ChildDocType = { name?: string | null };
+  const childSchema = new mongoose.Schema<ChildDocType>({ name: String }, { _id: false });
+
+  const parentSchemaDef = {
+    children: [childSchema],
+    child: childSchema
+  };
+
+  // Explicit DocType is used directly as RawDocType
+  expect<InferRawDocType<typeof parentSchemaDef>>().type.toBe<{
+    children: ChildDocType[];
+    child?: ChildDocType | null;
+    _id: Types.ObjectId }>();
+}
+
+function gh16045() {
+  const circleSchema = new mongoose.Schema({
+    kind: { type: String, enum: ['Circle'] },
+    name: { baseName: String },
+    radius: Number
+  });
+  const squareSchema = new mongoose.Schema({
+    kind: { type: String, enum: ['Square'] },
+    side: Number
+  });
+
+  const shapeSchema = new mongoose.Schema({ name: String }, { discriminatorKey: 'kind' });
+  type ShapeOptions = ResolveSchemaOptions<ObtainSchemaGeneric<typeof shapeSchema, 'TSchemaOptions'>>;
+  expect<ShapeOptions['discriminatorKey']>().type.toBe<'kind'>();
+  const schemaDefinition = {
+    shape: {
+      type: shapeSchema,
+      discriminators: {
+        Circle: circleSchema,
+        Square: squareSchema
+      }
+    }
+  } as const;
+
+  type ShapeType = NonNullable<InferRawDocType<typeof schemaDefinition>['shape']>;
+  type BaseType = InferRawDocTypeFromSchema<typeof shapeSchema>;
+  type BaseWithNullDiscriminator = Omit<BaseType, 'kind'> & { kind?: null };
+  type CircleType = InferRawDocTypeFromSchema<typeof circleSchema> & { kind: 'Circle' };
+  type SquareType = InferRawDocTypeFromSchema<typeof squareSchema> & { kind: 'Square' };
+
+  type CircleTypeUnionMember = Omit<BaseType, keyof CircleType> & CircleType;
+  type SquareTypeUnionMember = Omit<BaseType, keyof SquareType> & SquareType;
+  expect<ShapeType>().type.toBe<
+    BaseWithNullDiscriminator |
+    CircleTypeUnionMember |
+    SquareTypeUnionMember
+  >();
+  expect<ShapeType['kind']>().type.toBe<'Circle' | 'Square' | null | undefined>();
+  expect<Extract<ShapeType, { kind: 'Circle' }>['radius']>().type.toBe<number | null | undefined>();
+  expect<Extract<ShapeType, { kind: 'Square' }>['side']>().type.toBe<number | null | undefined>();
+}
+
+function gh16045RequiredDiscriminatorKey() {
+  const baseSchema = new mongoose.Schema({
+    kind: { type: String, required: true },
+    name: String
+  }, { discriminatorKey: 'kind' });
+  const schemaDefinition = {
+    shape: {
+      type: baseSchema,
+      discriminators: {}
+    }
+  } as const;
+
+  type ShapeType = NonNullable<InferRawDocType<typeof schemaDefinition>['shape']>;
+  expect<ShapeType['kind']>().type.toBe<string>();
+}
+
+function gh15988() {
+  // Test nested path (no type key) - should NOT have _id
+  const locationSchemaDef = {
+    name: {
+      type: String,
+      required: true
+    },
+    coordinates: {
+      latitude: {
+        type: Number,
+        required: true
+      },
+      longitude: {
+        type: Number,
+        required: true
+      }
+    }
+  } as const;
+
+  // Nested paths should not have _id added
+  expect<InferRawDocType<typeof locationSchemaDef>>().type.toBe<{
+    name: string;
+    coordinates?: { latitude: number; longitude: number } | null;
+    _id: Types.ObjectId }>();
+
+  // Test subdocument (has type key with object value) - should have _id
+  const schemaDef2 = {
+    name: {
+      type: String,
+      required: true
+    },
+    data: {
+      type: {
+        role: String
+      },
+      default: {}
+    }
+  } as const;
+
+  // Subdocuments (defined with type: {...}) should have _id added
+  expect<InferRawDocType<typeof schemaDef2>>().type.toBe<{
+    name: string;
+    data: { role?: string | null; _id: Types.ObjectId };
+    _id: Types.ObjectId }>();
+
+  // Test subdocument with _id: false - should NOT have _id
+  const schemaDef3 = {
+    name: {
+      type: String,
+      required: true
+    },
+    coordinates: {
+      type: {
+        latitude: {
+          type: Number,
+          required: true
+        },
+        longitude: {
+          type: Number,
+          required: true
+        }
+      },
+      required: true,
+      _id: false
+    }
+  } as const;
+
+  // Subdocuments with _id: false should not have _id added
+  expect<InferRawDocType<typeof schemaDef3>>().type.toBe<{
+    name: string;
+    coordinates: { latitude: number; longitude: number };
+    _id: Types.ObjectId }>();
+
+  // Test subdocument (has type key with object value) with no options - should have _id
+  const schemaDef4 = {
+    name: {
+      type: String,
+      required: true
+    },
+    data: {
+      type: {
+        role: String
+      }
+    }
+  } as const;
+
+  // Subdocuments (defined with type: {...}) should have _id added, but optional since no `required` or `default`
+  expect<InferRawDocType<typeof schemaDef4>>().type.toBe<{
+    name: string;
+    data?:({ role?: string | null; _id: Types.ObjectId }) | null;
+    _id: Types.ObjectId }>();
+
+  // Test 1: Array of subdocuments - should have _id
+  const schemaDef5 = {
+    users: [{
+      name: { type: String, required: true },
+      email: String
+    }]
+  } as const;
+
+  // Arrays of subdocuments should have _id added to each element
+  expect<InferRawDocType<typeof schemaDef5>>().type.toBe<{
+    users?: Array<{ name: string; email?: string | null; _id: Types.ObjectId }> | null;
+    _id: Types.ObjectId }>();
+
+  // Test 2: Array of nested paths (no type key in array element) - should have _id (arrays are always subdocs)
+  const schemaDef6 = {
+    locations: [{
+      latitude: Number,
+      longitude: Number
+    }]
+  } as const;
+
+  // Arrays of objects are subdocuments, so they get _id
+  expect<InferRawDocType<typeof schemaDef6>>().type.toBe<{
+    locations?: Array<{ latitude?: number | null; longitude?: number | null; _id: Types.ObjectId }> | null;
+    _id: Types.ObjectId }>();
+
+  // Test 3: Custom typeKey - nested path should not have _id
+  const schemaDef7 = {
+    name: {
+      $type: String,
+      required: true
+    },
+    coordinates: {
+      latitude: {
+        $type: Number,
+        required: true
+      },
+      longitude: {
+        $type: Number,
+        required: true
+      }
+    }
+  } as const;
+
+  // With custom typeKey, nested paths (no $type key) should still not have _id
+  expect<InferRawDocType<typeof schemaDef7, { typeKey: '$type' }>>().type.toBe<{
+    name: string;
+    coordinates?: { latitude: number; longitude: number } | null;
+    _id: Types.ObjectId }>();
+
+  // Test 4: Custom typeKey - subdocument should have _id
+  const schemaDef8 = {
+    name: {
+      $type: String,
+      required: true
+    },
+    data: {
+      $type: {
+        role: String
+      },
+      default: {}
+    }
+  } as const;
+
+  // With custom typeKey, subdocuments (with $type key) should have _id
+  expect<InferRawDocType<typeof schemaDef8, { typeKey: '$type' }>>().type.toBe<{
+    name: string;
+    data: { role?: string | null; _id: Types.ObjectId };
+    _id: Types.ObjectId }>();
+}
+
+async function gh16053() {
+  const schemaDefinition = new mongoose.Schema({
+    email: {
+      type: String,
+      required: true
+    },
+    password: {
+      type: String,
+      required: true
+    },
+    dateOfBirth: {
+      type: Date,
+      required: true
+    }
+  });
+
+  const TestModel = mongoose.model('Test', schemaDefinition);
+  type TestType = mongoose.InferRawDocTypeFromSchema<typeof schemaDefinition>;
+
+  async function queryById(id: string) {
+    TestModel.findById(id).lean().then(result => {
+      if (result) {
+        expect(result).type.toBe<FlattenMaps<TestType> & { _id: Types.ObjectId, __v: number }>();
+        console.log(result._id);
+      }
+    });
+  }
+}

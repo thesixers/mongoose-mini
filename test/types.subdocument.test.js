@@ -1,0 +1,143 @@
+
+/**
+ * Module dependencies.
+ */
+
+'use strict';
+
+const setDocumentTimestamps = require('../lib/helpers/timestamps/setDocumentTimestamps');
+const start = require('./common');
+
+const assert = require('assert');
+
+const mongoose = start.mongoose;
+const Schema = mongoose.Schema;
+
+/**
+ * Test.
+ */
+
+describe('types.subdocument', function() {
+  let GrandChildSchema;
+  let ChildSchema;
+  let ParentSchema;
+  let db;
+
+  before(function() {
+    GrandChildSchema = new Schema({
+      name: String
+    });
+
+    ChildSchema = new Schema({
+      name: String,
+      child: GrandChildSchema
+    });
+
+    ParentSchema = new Schema({
+      name: String,
+      children: [ChildSchema]
+    });
+
+    mongoose.model('Parent-3589-Sub', ParentSchema);
+    db = start();
+  });
+
+  after(async function() {
+    await db.close();
+  });
+
+  it('returns a proper ownerDocument (gh-3589)', function() {
+    const Parent = mongoose.model('Parent-3589-Sub');
+    const p = new Parent({
+      name: 'Parent Parentson',
+      children: [
+        {
+          name: 'Child Parentson',
+          child: {
+            name: 'GrandChild Parentson'
+          }
+        }
+      ]
+    });
+
+    assert.equal(p._id, p.children[0].child.ownerDocument()._id);
+  });
+
+  it('not setting timestamps in subdocuments', function() {
+    const Thing = db.model('Test', new Schema({
+      subArray: [{
+        testString: String
+      }]
+    }, {
+      timestamps: true
+    }));
+
+    const thingy = new Thing({
+      subArray: [{
+        testString: 'Test 1'
+      }]
+    });
+
+    const now = new Date();
+    setDocumentTimestamps(thingy, undefined, () => now, 'createdAt', 'updatedAt');
+    assert.equal(thingy.createdAt.valueOf(), now.valueOf());
+    assert.equal(thingy.updatedAt.valueOf(), now.valueOf());
+    assert.strictEqual(thingy.subArray[0].createdAt, undefined);
+    assert.strictEqual(thingy.subArray[0].updatedAt, undefined);
+  });
+
+  describe('#isModified', function() {
+    it('defers to parent isModified (gh-8223)', function() {
+      const childSchema = Schema({ id: Number, text: String });
+      const parentSchema = Schema({ child: childSchema });
+      const Model = db.model('Test1', parentSchema);
+
+      const doc = new Model({ child: { text: 'foo' } });
+      assert.ok(doc.isModified('child.id'));
+      assert.ok(doc.child.isModified('id'));
+    });
+  });
+
+  it('respects schematype-level minimize (gh-15313)', function() {
+    const MySubSchema = new Schema({}, { strict: false, _id: false });
+    const MySchema = new Schema({ myfield: { type: MySubSchema, minimize: false } });
+    const MyModel = db.model('MyModel', MySchema);
+
+    const doc = new MyModel({ myfield: {} });
+    assert.deepStrictEqual(doc.toObject().myfield, {});
+
+    const doc2 = new MyModel({ myfield: { empty: {} } });
+    assert.deepStrictEqual(doc2.toObject().myfield, { empty: {} });
+  });
+
+  it('does not minimize empty document array elements to undefined (gh-7322)', function() {
+    const ItemSchema = new Schema(
+      { taxRate: Number, taxAmount: Number },
+      { _id: false }
+    );
+    const MySchema = new Schema({ items: { type: [ItemSchema], default: undefined } });
+    const MyModel = db.model('Test2', MySchema);
+
+    const doc = new MyModel({
+      items: [{ taxRate: 19 }, { taxRate: undefined, taxAmount: undefined }]
+    });
+
+    assert.deepStrictEqual(doc.toObject({ minimize: true }).items, [{ taxRate: 19 }, {}]);
+  });
+
+  it('saves an empty document array element as an empty object, not null (gh-7322)', async function() {
+    const ItemSchema = new Schema(
+      { taxRate: Number, taxAmount: Number },
+      { _id: false }
+    );
+    const MySchema = new Schema({ items: { type: [ItemSchema], default: undefined } });
+    const MyModel = db.model('Test3', MySchema);
+
+    const doc = await MyModel.create({
+      items: [{ taxRate: 19 }, { taxRate: undefined, taxAmount: undefined }]
+    });
+
+    const raw = await MyModel.collection.findOne({ _id: doc._id });
+    assert.deepStrictEqual(raw.items, [{ taxRate: 19 }, {}]);
+  });
+});

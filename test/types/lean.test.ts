@@ -1,0 +1,452 @@
+import mongoose, { Schema, model, Types, InferSchemaType, FlattenMaps, HydratedDocument, Model, Document, PopulatedDoc } from 'mongoose';
+import { expect } from 'tstyche';
+
+function gh10345() {
+  (function() {
+    interface User {
+      name: string;
+      id: number;
+    }
+
+    const UserModel = model<User>('User', new Schema({ name: String, id: Number }));
+
+    const doc = new UserModel({ name: 'test', id: 42 });
+
+    const leanDoc = doc.toObject();
+    leanDoc.id = 43;
+  })();
+
+  (async function() {
+    interface User {
+      name: string;
+    }
+
+    const UserModel = model<User>('User', new Schema({ name: String }));
+
+    const doc = new UserModel({ name: 'test' });
+
+    const leanDoc = doc.toObject<User>();
+    expect(leanDoc).type.not.toHaveProperty('id');
+
+    const doc2 = await UserModel.findOne().orFail().lean();
+    expect(doc2).type.not.toHaveProperty('id');
+  })();
+}
+
+async function gh11761() {
+  const thingSchema = new Schema<{ name: string }>({
+    name: Schema.Types.String
+  });
+
+  const ThingModel = model('Thing', thingSchema);
+
+  {
+    // make sure _id has been added to the type
+    const { _id, ...thing1 } = (await ThingModel.create({ name: 'thing1' })).toObject();
+    expect(_id).type.toBe<Types.ObjectId>();
+
+    console.log({ _id, thing1 });
+  }
+
+  const foundDoc = await ThingModel.findOne().lean().limit(1).exec();
+  {
+    if (!foundDoc) {
+      return;
+    }
+    const { _id, ...thing2 } = foundDoc;
+    expect(_id).type.toBe<Types.ObjectId>();
+  }
+}
+
+async function gh11118(): Promise<void> {
+  interface User {
+    name: string;
+    email: string;
+    avatar?: string;
+  }
+
+  const schema = new Schema<User>({
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    avatar: String
+  });
+
+  const UserModel = model<User>('User', schema);
+
+  const docs = await UserModel.find().lean().exec();
+
+  for (const doc of docs) {
+    const _id: Types.ObjectId = doc._id;
+  }
+}
+
+async function _11767() {
+  interface Question {
+    text: string;
+    answers: string[];
+    correct: number;
+  }
+  const QuestionSchema = new Schema<Question>({
+    text: String,
+    answers: [String],
+    correct: Number
+  });
+  interface Exam {
+    element: string;
+    dateTaken: Date;
+    questions: Question[];
+  }
+  const ExamSchema = new Schema<Exam>({
+    element: String,
+    dateTaken: Date,
+    questions: [QuestionSchema]
+  });
+
+  const ExamModel = model<Exam>('Exam', ExamSchema);
+
+  const examFound = await ExamModel.findOne().lean().exec();
+  if (!examFound) return;
+
+  // Had to comment some of these active checks out
+
+  // $pop shouldn't be there, because questions should no longer be a mongoose array
+  // expectError<Function>(examFound.questions.$pop);
+  // popoulated shouldn't be on the question doc because it shouldn't
+  // be a mongoose subdocument anymore
+  expect(examFound.questions[0]['answers']).type.toBe<string[]>();
+
+  const examFound2 = await ExamModel.findOne().exec();
+  if (!examFound2) return;
+  const examFound2Obj = examFound2.toObject();
+
+  expect(examFound2Obj.questions[0]['answers']).type.toBe<string[]>();
+}
+
+async function gh13010() {
+  const schema = new Schema({
+    name: { required: true, type: Map, of: String }
+  });
+
+  const CountryModel = model('Country', schema);
+
+  await CountryModel.create({
+    name: {
+      en: 'Croatia',
+      ru: 'Хорватия'
+    }
+  });
+
+  const country = await CountryModel.findOne().lean().orFail().exec();
+  expect(country.name).type.toBe<Record<string, string>>();
+}
+
+async function gh13010_1() {
+  const schema = Schema.create({
+    name: { required: true, type: Map, of: String }
+  });
+
+  const CountryModel = model('Country', schema);
+
+  await CountryModel.create({
+    name: {
+      en: 'Croatia',
+      ru: 'Хорватия'
+    }
+  });
+
+  const country = await CountryModel.findOne().lean().orFail().exec();
+
+  expect(country.name).type.toBe<Record<string, string>>();
+}
+
+async function gh13345_1() {
+  const imageSchema = new Schema({
+    url: { required: true, type: String }
+  });
+
+  const placeSchema = new Schema({
+    images: { required: true, type: [imageSchema] }
+  });
+
+  type Place = InferSchemaType<typeof placeSchema>;
+
+  const PlaceModel = model('Place', placeSchema);
+
+  const place = await PlaceModel.findOne().lean().orFail().exec();
+  expect(place).type.toBeAssignableTo<Place>();
+}
+
+async function gh13345_2() {
+  const imageSchema = new Schema({
+    description: { required: true, type: Map, of: String },
+    url: { required: true, type: String }
+  });
+
+  const placeSchema = new Schema({
+    images: { required: true, type: [imageSchema] }
+  });
+
+  type Place = InferSchemaType<typeof placeSchema>;
+
+  const PlaceModel = model('Place', placeSchema);
+
+  const place = await PlaceModel.findOne().lean().orFail().exec();
+  expect(place).type.toBeAssignableTo<FlattenMaps<Place>>();
+
+  expect(place.images[0]['description']).type.toBe<Record<string, string>>();
+}
+
+async function gh13345_3() {
+  const imageSchema = new Schema({
+    url: { required: true, type: String }
+  });
+
+  const placeSchema = new Schema({
+    images: { type: [imageSchema], default: undefined }
+  });
+
+  type Place = InferSchemaType<typeof placeSchema>;
+
+  const PlaceModel = model('Place', placeSchema);
+
+  const place = await PlaceModel.findOne().lean().orFail().exec();
+  expect(place).type.toBeAssignableTo<Place>();
+}
+
+async function gh13382() {
+  const schema = new Schema({
+    name: String
+  });
+  const Test = model('Test', schema);
+
+  const res = await Test.updateOne({}, { name: 'bar' }).lean();
+  expect(res).type.toBeAssignableTo<{ matchedCount: number, modifiedCount: number }>();
+}
+
+async function gh15057() {
+  type Attachment =
+    | {
+        type: 'foo';
+        value?: undefined;
+      }
+    | {
+        type: 'string';
+        value?: string;
+      };
+
+  const TestSchema = new Schema<Attachment>({
+    type: { type: String, required: true },
+    value: { type: String }
+  });
+
+  const AttachmentModel = model<Attachment>('test', TestSchema);
+
+  const main = async() => {
+    const item = await AttachmentModel.findOne().lean();
+
+    if (!item) return;
+
+    doSomeThing(item);
+  };
+
+  const doSomeThing = (item: Attachment) => {
+    console.log(item);
+  };
+}
+
+async function gh15122() {
+  interface IChild {
+    _id: Types.ObjectId;
+    name: string;
+  }
+
+  type ChildDocumentOverrides = {};
+
+  interface IChildVirtuals {
+    id: string;
+  }
+
+  type ChildInstance = HydratedDocument<
+    IChild,
+    ChildDocumentOverrides & IChildVirtuals
+  >;
+
+  type ChildModelType = Model<
+    IChild,
+    {},
+    ChildDocumentOverrides,
+    IChildVirtuals,
+    ChildInstance
+  >;
+
+
+  interface IParent {
+    _id: Types.ObjectId;
+    name: string;
+    surname: string;
+    child: PopulatedDoc<Document<Types.ObjectId> & IChild>;
+  }
+
+  type ParentDocumentOverrides = {};
+
+  interface IParentVirtuals {
+    id: string;
+    fullName: string;
+  }
+
+  type ParentInstance = HydratedDocument<
+    IParent,
+    ParentDocumentOverrides & IParentVirtuals
+  >;
+
+  type ParentModelType = Model<
+    IParent,
+    {},
+    ParentDocumentOverrides,
+    IParentVirtuals,
+    ParentInstance
+  >;
+
+  const parentSchema = new Schema<IParent, ParentModelType>(
+    {
+      name: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      surname: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      child: {
+        type: 'ObjectId',
+        ref: 'Child',
+        required: true
+      }
+    }
+  );
+
+  parentSchema.virtual('fullName').get(function() {
+    return `${this.name} ${this.surname}`;
+  });
+
+  const Parent = model<IParent, ParentModelType>('Parent', parentSchema);
+
+  const testFn = (parent: IParent) => {};
+  const parentDoc = await Parent.findOne().lean();
+  if (parentDoc) {
+    testFn(parentDoc);
+  }
+}
+
+async function gh15158() {
+  type FooBar = {
+    value: string;
+  };
+
+  const createSomeModelAndDoSomething = async <T extends FooBar>() => {
+    const TestSchema = new Schema<T>({
+      value: { type: String }
+    });
+
+    const FooBarModel = model<T>('test', TestSchema);
+
+    const item = await FooBarModel.findOne().lean();
+
+    if (!item) return;
+
+    doSomeThing(item);
+  };
+
+  const doSomeThing = <T extends FooBar>(item: T) => {
+    console.log(item);
+  };
+
+  createSomeModelAndDoSomething();
+}
+
+async function leanFalse() {
+  const schema = new Schema({
+    name: String
+  });
+  const Test = model('Test', schema);
+  type TestDocument = ReturnType<(typeof Test)['hydrate']>;
+
+  const doc = await Test.findOne().orFail().lean(false);
+  expect(doc).type.toBe<TestDocument>();
+}
+
+async function gh15583() {
+  const schema = new Schema(
+    { name: String },
+    {
+      lean: {
+        transform: doc => {
+          doc.transformed = true;
+          return doc;
+        }
+      }
+    }
+  );
+
+  type TRawDocType = InferSchemaType<typeof schema>;
+  const TestModel = model('Test', schema);
+
+  const testDoc = await TestModel.findOne().lean<TRawDocType & { transformed: boolean }>().orFail();
+  expect(testDoc.transformed).type.toBe<boolean>();
+}
+
+async function gh15583_2() {
+  const schema = new Schema(
+    { name: String },
+    { lean: true }
+  );
+  const TestModel = model('Test', schema);
+
+  const testDoc = await TestModel.findOne().orFail();
+  expect(testDoc).type.not.toHaveProperty('save');
+
+  const testDoc2 = await TestModel.findById('anything').lean().orFail();
+  expect(testDoc2).type.not.toHaveProperty('save');
+
+  const testDocs = await TestModel.find().lean().exec();
+  for (const doc of testDocs) {
+    expect(doc).type.not.toHaveProperty('save');
+  }
+
+  const testDoc3 = await TestModel.findOneAndUpdate({}, { name: 'test' }).lean().orFail();
+  expect(testDoc3).type.not.toHaveProperty('save');
+
+  const testDoc4 = await TestModel.findOneAndReplace({}, { name: 'test' }).lean().orFail();
+  expect(testDoc4).type.not.toHaveProperty('save');
+
+  const testDoc5 = await TestModel.findOneAndDelete({}).lean().orFail();
+  expect(testDoc5).type.not.toHaveProperty('save');
+
+  const schema2 = new Schema(
+    { name: String },
+    { lean: { virtuals: true } }
+  );
+  const TestModel2 = model('Test', schema2);
+
+  const testDoc6 = await TestModel2.findOne().orFail();
+  expect(testDoc6).type.not.toHaveProperty('save');
+
+  const testDoc7 = await TestModel2.findById('anything').lean().orFail();
+  expect(testDoc7).type.not.toHaveProperty('save');
+
+  const testDocs2 = await TestModel2.find().lean().exec();
+  for (const doc of testDocs2) {
+    expect(doc).type.not.toHaveProperty('save');
+  }
+
+  const testDoc8 = await TestModel2.findOneAndUpdate({}, { name: 'test' }).lean().orFail();
+  expect(testDoc8).type.not.toHaveProperty('save');
+
+  const testDoc9 = await TestModel2.findOneAndReplace({}, { name: 'test' }).lean().orFail();
+  expect(testDoc9).type.not.toHaveProperty('save');
+
+  const testDoc10 = await TestModel2.findOneAndDelete({}).lean().orFail();
+  expect(testDoc10).type.not.toHaveProperty('save');
+}
